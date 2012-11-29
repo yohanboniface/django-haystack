@@ -691,7 +691,7 @@ class LiveWhooshSearchQuerySetTestCase(TestCase):
         reset_search_queries()
         self.assertEqual(len(connections['default'].queries), 0)
         results = self.sqs.auto_query('Indexed!')
-        self.assertEqual(sorted([int(result.pk) for result in results[1:3]]), [1, 2])
+        self.assertEqual(sorted([int(result.pk) for result in results[1:3]]), [2, 3])
         self.assertEqual(len(connections['default'].queries), 1)
 
         reset_search_queries()
