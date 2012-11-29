@@ -387,36 +387,21 @@ class WhooshSearchBackend(BaseSearchBackend):
             if narrowed_results is not None:
                 raw_results.filter(narrowed_results)
 
-            # Determine the page.
-            page_num = 0
-
             if end_offset is None:
                 end_offset = 1000000
 
             if start_offset is None:
                 start_offset = 0
 
-            page_length = end_offset - start_offset
-
-            if page_length and page_length > 0:
-                page_num = start_offset / page_length
-
-            # Increment because Whoosh uses 1-based page numbers.
-            page_num += 1
-
-            try:
-                raw_page = ResultsPage(raw_results, page_num, page_length)
-            except ValueError:
-                if not self.silently_fail:
-                    raise
-
-                return {
-                    'results': [],
-                    'hits': 0,
-                    'spelling_suggestion': None,
-                }
-
-            results = self._process_results(raw_page, highlight=highlight, query_string=query_string, spelling_query=spelling_query, result_class=result_class)
+            results = self._process_results(
+                raw_results,
+                highlight=highlight,
+                query_string=query_string,
+                spelling_query=spelling_query,
+                result_class=result_class,
+                start_offset=start_offset,
+                end_offset=end_offset,
+            )
             searcher.close()
 
             if hasattr(narrow_searcher, 'close'):
@@ -532,19 +517,7 @@ class WhooshSearchBackend(BaseSearchBackend):
             if narrowed_results is not None and hasattr(raw_results, 'filter'):
                 raw_results.filter(narrowed_results)
 
-        try:
-            raw_page = ResultsPage(raw_results, page_num, page_length)
-        except ValueError:
-            if not self.silently_fail:
-                raise
-
-            return {
-                'results': [],
-                'hits': 0,
-                'spelling_suggestion': None,
-            }
-
-        results = self._process_results(raw_page, result_class=result_class)
+        results = self._process_results(raw_results, result_class=result_class)
         searcher.close()
 
         if hasattr(narrow_searcher, 'close'):
@@ -552,13 +525,17 @@ class WhooshSearchBackend(BaseSearchBackend):
 
         return results
 
-    def _process_results(self, raw_page, highlight=False, query_string='', spelling_query=None, result_class=None):
+    def _process_results(self, raw_results, highlight=False, query_string='',
+                                                        spelling_query=None,
+                                                        result_class=None,
+                                                        start_offset=0,
+                                                        end_offset=None):
         from haystack import connections
         results = []
 
         # It's important to grab the hits first before slicing. Otherwise, this
         # can cause pagination failures.
-        hits = len(raw_page)
+        hits = len(raw_results)
 
         if result_class is None:
             result_class = SearchResult
@@ -568,8 +545,8 @@ class WhooshSearchBackend(BaseSearchBackend):
         unified_index = connections[self.connection_alias].get_unified_index()
         indexed_models = unified_index.get_indexed_models()
 
-        for doc_offset, raw_result in enumerate(raw_page):
-            score = raw_page.score(doc_offset) or 0
+        for doc_offset, raw_result in enumerate(raw_results[start_offset:end_offset]):
+            score = raw_results.score(doc_offset) or 0
             app_label, model_name = raw_result[DJANGO_CT].split('.')
             additional_fields = {}
             model = get_model(app_label, model_name)
